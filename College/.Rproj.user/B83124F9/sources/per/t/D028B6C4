@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1513152426362.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1398885146",
+    "id" : "D028B6C4",
+    "lastKnownWriteTime" : 1513153393,
+    "last_content_update" : 1513153393188,
+    "path" : "~/Documents/Y3S1/BITI 3133 Neural Network/Mini Project/College/main.R",
+    "project_path" : "main.R",
+    "properties" : {
+        "cursorPosition" : "32,0",
+        "scrollLine" : "0",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
