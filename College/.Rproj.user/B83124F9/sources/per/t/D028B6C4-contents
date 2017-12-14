@@ -2,8 +2,8 @@ library(ISLR)
 library(caTools)
 library(neuralnet)
 
-head(College, 3)
-
+# head(College, 3)
+College
 # Omit uni name, label and find max and min data
 maxs <- apply(College[,2:18], 2, max)
 mins <- apply(College[,2:18], 2, min)
