@@ -1,87 +1,134 @@
-# import libraries
-library(psych)
 library(neuralnet)
-library(corrplot)
-library(caTools)
 library(ggplot2)
-library(caret)
-set.seed(100)
 
-# import local files
 setwd("./")
 data = read.csv("ProcessedData.csv")
 
-# convert categorical data to numerical data
-dummy_fat <- dummy.code(data$Item_Fat_Content)
-dummy_item_type <- dummy.code(data$Item_Type)
-dummy_outlet_size <- dummy.code(data$Outlet_Size)
-dummy_outlet_type <- dummy.code(data$Outlet_Type)
-dummy_mrp_lvel <- dummy.code(data$MRP_Level)
-dummy_location_type <- dummy.code(data$Outlet_Location_Type)
+# methods
+normalizeData <- function(x) {
+  (x -min(x))/ (max(x)- min(x))
+}
+denormalizeData <- function(x) {
+  return (x * (max(x) - min(x)) + min(x))
+}
+softplus <- function(x) log(1+exp(x))
 
-# append dummy coded data to data
-data <- data.frame(dummy_fat, data)
-data <- data.frame(dummy_item_type, data)
-data <- data.frame(dummy_outlet_size, data)
-data <- data.frame(dummy_outlet_type, data)
-data <- data.frame(dummy_mrp_lvel, data)
-data <- data.frame(dummy_location_type, data)
+# Outlet sales is greatly affected by Maximum Retail Price
+# and also grocery store sells less than supermarket
+# ggplot(data, aes(x=data$Item_MRP, y=data$Item_Outlet_Sales, color=data$Outlet_Type)) +
+#   geom_point(shape=1) +
+#   xlab("Maximum Retail Price") +
+#   ylab("Item Outlet Sales") +
+#   ggtitle("Item Sales vs Item type")
+# # 
+# # # this shows that how much each store sells (volume) is the linear function
+# ggplot(data, aes(x=data$Item_MRP, y=log(data$Item_Outlet_Sales), color=data$Outlet_Type)) +
+#   geom_point(shape=1) +
+#   xlab("Maximum Retail Price") +
+#   ylab("Item Outlet Sales") +
+#   ggtitle("Item Sales vs Item type (logged transformed)")
+# 
+# head(data$Item_Outlet_Sales)
+# 
+# # solve this by averaging sells volume per store
+# data$Item_Outlet_Sales <- data$Item_Outlet_Sales / data$Item_MRP
+# 
+# # result
+# ggplot(data, aes(x=data$Item_MRP, y=data$Item_Outlet_Sales, color=data$Outlet_Type)) +
+#   geom_point(shape=1) +
+#   xlab("Maximum Retail Price") +
+#   ylab("Item Outlet Sales")
 
-# remove some not meaningful column
-data$Outlet_Identifier <- NULL
-data$X <- NULL
-data$Item_Identifier <- NULL
-data$Item_Fat_Content <- NULL
-data$Item_Type <- NULL
-data$Outlet_Size <- NULL
-data$Outlet_Type <- NULL
-data$MRP_Level <- NULL
-data$Outlet_Location_Type <- NULL
+# save ori price for scaling purpose
+train_o <- data$Item_Outlet_Sales
 
-# normalize data method
-normalizeData <- function(x) {(x - min(x))/(max(x)-min(x))}
-
-# normalize data with mix-max
+# normalize data
 data$Year <- normalizeData(data$Year)
 data$Item_MRP <- normalizeData(data$Item_MRP)
 data$Item_Weight <- normalizeData(data$Item_Weight)
 data$Item_Outlet_Sales <- normalizeData(data$Item_Outlet_Sales)
 
-summary(data)
+# splitting data
+train <- data[1:8523,]
+test <- data[8524:14204,]
+test$Item_Outlet_Sales <- NULL
+test_item_identifier <- data[8524:14204,]$Item_Identifier
+test_outlet_identifier <- data[8524:14204,]$Outlet_Identifier
 
-# split data set into training and testing
-#train <- data[1:8524,]
-#test <- data[8524:14205,]
+# remove excess attributes
+data$X <- NULL
+data$Item_Identifier <- NULL
+data$Outlet_Identifier <- NULL
 
-train <- data[1:100,]
-test <- data[8524:9524,]
+# neuralnet model transform categorical data for us
+m_train <- model.matrix(
+  ~ Item_Outlet_Sales + 
+    Item_Weight +
+    Item_Fat_Content +
+    Item_Visibility +
+    Item_MRP +
+    Outlet_Size + 
+    Outlet_Location_Type +
+    Outlet_Type +
+    Year +
+    MRP_Level,
+  data = train
+)
 
-# softplus activation function (a close approximation to ReLU)
-softplus <- function(x) log(1+exp(x))
+m_test <- model.matrix(
+  ~ Item_Weight +
+    Item_Fat_Content +
+    Item_Visibility +
+    Item_MRP +
+    Outlet_Size +
+    Outlet_Location_Type +
+    Outlet_Type +
+    Year +
+    MRP_Level,
+  data = test
+)
 
-# train a neural model
-n <- names(train[1:37])
-f <- as.formula(paste("Item_Outlet_Sales ~", paste(n[!n %in% "Item_Outlet_Sales"], collapse = " + ")))
-net <- neuralnet(formula = f, 
-                 data = as.matrix(train),
-                 act.fct = softplus,
-                 algorithm = "rprop+",
-                 stepmax = 1e6,
-                 lifesign = "full",
-                 rep = 2,
-                 hidden = c(10, 8, 6),
-                 linear.output = T)
+# build a net
+net = neuralnet(
+  Item_Outlet_Sales ~
+    Item_Weight +
+    Item_Fat_ContentNone +
+    Item_Fat_ContentRegular +
+    Item_Visibility +
+    Item_MRP +
+    Outlet_SizeSmall +
+    Outlet_SizeMedium +
+    Outlet_Location_TypeTier_2 +
+    Outlet_Location_TypeTier_3 +
+    Outlet_TypeSupermarket_Type1 +
+    Outlet_TypeSupermarket_Type2 +
+    Outlet_TypeSupermarket_Type3 +
+    Year +
+    MRP_LevelLow +
+    MRP_LevelMedium +
+    MRP_LevelVery_High,
+  stepmax = 1e6,
+  data = m_train,
+  lifesign = "full",
+  linear.output = T,
+  act.fct = softplus,
+  algorithm = "rprop+",
+  hidden = c(5, 3, 2)
+)
 
-# plot the nn model
-par(mar = numeric(4), family = 'serif')
-plot(net, 
-     information = TRUE, 
-     arrow.length = 0.1, 
-     fontsize = 8,
-     rep = "best",
-     alpha = 0.8,
-     col.out = "orange",
-     col.entry = "red")
+# exclude intercept and label
+result <- compute(net, m_test[,2:17])
+predictedValue <- result$net.result * (max(train_o) - min(train_o)) + min(train_o)
 
-# see result
-output <- compute(net, test[, 1:37])
+predictedValue <- as.data.frame(predictedValue)
+
+predictedValue["Item_Identifier"] <- test_item_identifier
+predictedValue["Outlet_Identifier"] <- test_outlet_identifier
+colnames(predictedValue)[colnames(predictedValue)=="V1"] <- "Item_Outlet_Sales"
+
+write.csv(predictedValue, file="Result.csv")
+
+# release memory
+gc(verbose = TRUE)
+rm(list = ls(all = TRUE))
+gc(verbose = TRUE)
